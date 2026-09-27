@@ -149,6 +149,18 @@ jobs:
           $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           & $gcc --version
       - run: python scripts/build_windows.py ${{ matrix.arguments }}
+      - name: Surface the CMake install failure
+        if: failure()
+        shell: pwsh
+        run: |
+          Write-Host '--- expected bundle inputs ---'
+          'windows/runner/duanju_core.dll', 'build/windows/x64/runner/Release/zhenguojian.exe' | ForEach-Object {
+            Write-Host ("{0}: {1}" -f $_, (Test-Path $_))
+          }
+          Get-ChildItem 'build/windows/x64/runner/Release' -ErrorAction SilentlyContinue |
+            Select-Object -ExpandProperty Name
+          Write-Host '--- rerun cmake install ---'
+          cmake --install 'build/windows/x64' --config Release
       - run: choco install ffmpeg --no-progress -y
       - run: python scripts/smoke_windows.py ${{ matrix.arguments }}
       - uses: actions/upload-artifact@v4
