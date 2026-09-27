@@ -106,12 +106,20 @@ func (s *service) health(writer http.ResponseWriter, request *http.Request) {
 	})
 }
 
+func (s *service) authHint() string {
+	if s.token == "" {
+		return "未设置 TOKEN：全部接口都不校验令牌，请只在可信的内网或反向代理后使用"
+	}
+	return "已启用 TOKEN：除 GET /healthz 与 GET / 外，其余请求都要带 Authorization: Bearer 令牌"
+}
+
 func (s *service) index(writer http.ResponseWriter, request *http.Request) {
 	writeJSON(writer, http.StatusOK, map[string]any{
-		"ok":          true,
-		"service":     serviceName,
-		"coreVersion": s.edition["version"],
-		"edition":     map[string]any{"allSources": s.edition["allSources"]},
+		"ok":           true,
+		"service":      serviceName,
+		"coreVersion":  s.edition["version"],
+		"edition":      map[string]any{"allSources": s.edition["allSources"]},
+		"authRequired": s.token != "",
 		"endpoints": []string{
 			"GET /healthz",
 			"GET /api/actions",
@@ -119,7 +127,7 @@ func (s *service) index(writer http.ResponseWriter, request *http.Request) {
 			"POST /api/request",
 		},
 		"request": "POST /api/request 使用与客户端原生核心一致的 JSON：{\"action\":\"catalog\",\"source\":\"hongguo\",\"page\":1}",
-		"auth":    "设置 TOKEN 后，除 /healthz 外的请求需要 Authorization: Bearer <token>",
+		"auth":    s.authHint(),
 	})
 }
 

@@ -180,6 +180,22 @@ func TestTokenGuardsApiButNotHealth(t *testing.T) {
 	}
 }
 
+func TestIndexDescribesAuthState(t *testing.T) {
+	open := newTestService(t, "", 4)
+	status, body := reply(t, open, http.MethodGet, "/", "", nil)
+	if status != http.StatusOK || !strings.Contains(body, "未设置 TOKEN") || !strings.Contains(body, `"authRequired":false`) {
+		t.Fatalf("未设置令牌时首页说明不正确：%d %s", status, body)
+	}
+	guarded := newTestService(t, "secret-token", 4)
+	status, body = reply(t, guarded, http.MethodGet, "/", "", nil)
+	if status != http.StatusOK || !strings.Contains(body, "已启用 TOKEN") || !strings.Contains(body, `"authRequired":true`) {
+		t.Fatalf("已设置令牌时首页说明不正确：%d %s", status, body)
+	}
+	if strings.Contains(body, "secret-token") {
+		t.Fatalf("首页不应泄露令牌：%s", body)
+	}
+}
+
 func TestBusyServiceRejectsExtraWork(t *testing.T) {
 	instance := newTestService(t, "", 1)
 	if !instance.enter() {

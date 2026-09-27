@@ -2,7 +2,7 @@
 
 > 本仓库源码 fork 自 [enginJie/guoapp](https://github.com/enginJie/guoapp)，在此基础上继续维护设备端实现、打包流程与 Docker 部署形态。
 
-Flutter 多端独立短剧应用，原名“短剧库 APP”。站源请求、解析、下载和播放均在设备上完成，不依赖旧项目或自建服务。当前源码版本：**0.2.51+57（未验证开发快照）**。本轮新增可选的 Docker 部署形态：`native/server` 把同一个原生核心以 HTTP 服务暴露（协议与客户端一致），根目录 `Dockerfile` 固定按全站源版构建，`scripts/package_docker_source.py` 生成可直接发给他人部署的纯源码包；App 本身仍是设备端应用，不依赖该服务。本轮另修复 GitHub Actions 首轮 `checks` 失败并让两版 Android 与 iOS 任务产出产物。上一轮新增管理员“启动时需要登录”开关：设置管理员密码后仍默认保持启动登录，管理员可在用户管理中关闭；关闭后保留密码保护，只在切换用户或手动锁定时验证。更早一轮核对剧果、野果、帝果的目录分页、榜单和播放解析链路：多站源更新默认批量 50 页，野果目录 / 搜索 / 播放使用 POST，剧果保留 CloudFront 签名 Cookie 到播放列表、分片、预加载和下载，帝果 vplayer 签名失败不再静默回退到未签名地址；野果运行时固定优先使用当前线路 `https://analyze.buxefaex.cc/`，通过 `https://ygdj7.com/` 发现新线路，旧域名仅保留缓存与身份兼容识别。本轮只维护源码和定向测试，不打包 APK、不安装设备、不做真实播放验收。
+Flutter 多端独立短剧应用，原名“短剧库 APP”。站源请求、解析、下载和播放均在设备上完成，不依赖旧项目或自建服务。当前源码版本：**0.2.52+58（未验证开发快照）**。本轮修正 Docker 服务首页的鉴权提示：留空 `TOKEN` 时明确说明“全部接口都不校验令牌”，设置后说明需要 `Authorization: Bearer`，并新增 `authRequired` 字段。上一轮新增可选的 Docker 部署形态：`native/server` 把同一个原生核心以 HTTP 服务暴露（协议与客户端一致），根目录 `Dockerfile` 固定按全站源版构建，`scripts/package_docker_source.py` 生成可直接发给他人部署的纯源码包；App 本身仍是设备端应用，不依赖该服务。本轮另修复 GitHub Actions 首轮 `checks` 失败并让两版 Android 与 iOS 任务产出产物。上一轮新增管理员“启动时需要登录”开关：设置管理员密码后仍默认保持启动登录，管理员可在用户管理中关闭；关闭后保留密码保护，只在切换用户或手动锁定时验证。更早一轮核对剧果、野果、帝果的目录分页、榜单和播放解析链路：多站源更新默认批量 50 页，野果目录 / 搜索 / 播放使用 POST，剧果保留 CloudFront 签名 Cookie 到播放列表、分片、预加载和下载，帝果 vplayer 签名失败不再静默回退到未签名地址；野果运行时固定优先使用当前线路 `https://analyze.buxefaex.cc/`，通过 `https://ygdj7.com/` 发现新线路，旧域名仅保留缓存与身份兼容识别。本轮只维护源码和定向测试，不打包 APK、不安装设备、不做真实播放验收。
 
 按用户 2026-09-21 的要求，继续暂停整体验证。启动、榜单、画质增强、站源改名、画中画、连续播放控制栏、红果系列剧提醒、播放器 Tab 化、首页 / 播放页优化、多站源站源修复和本轮启动登录开关均保留未验证快照状态；本轮只执行源码级定向检查，未完成真实设备视觉验收、Release APK、IPA 或真实站源播放验收。历史版本的检查记录不能作为本轮新增功能的验收结论。
 
@@ -710,7 +710,7 @@ docker run -d --name zhenguojian-core --restart unless-stopped -p 8080:8080 \
 | --- | --- | --- |
 | `PORT` | `8080` | 容器内监听端口；compose 中映射到主机 `PORT` |
 | `DATA_DIR` | `/data` | 缓存、会话与下载记录目录，需挂载卷 |
-| `TOKEN` | 空 | 设置后除 `GET /healthz` 外都要带 `Authorization: Bearer <token>` |
+| `TOKEN` | 空 | 留空则全部接口开放；设置后除 `GET /healthz`、`GET /` 外的接口都要带 `Authorization: Bearer 令牌` |
 | `MAX_CONCURRENCY` | `8` | 同时处理的请求数上限（1–64），超出返回 429 |
 | `TZ` | `Asia/Shanghai` | 时区 |
 | `GOPROXY` | `https://goproxy.cn,direct` | 仅构建期使用 |
@@ -720,9 +720,12 @@ docker run -d --name zhenguojian-core --restart unless-stopped -p 8080:8080 \
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/healthz` | 健康检查：编译版本、站源范围、运行时长；不校验令牌 |
+| GET | `/` | 服务首页：接口清单、当前鉴权状态；不校验令牌 |
 | GET | `/api/actions` | 支持的操作与说明 |
 | GET | `/api/sources` | 当前编译版本可用的站源 |
 | POST | `/api/request` | 与客户端原生核心一致的 JSON 协议 |
+
+首页和 `/healthz` 里的 `coreVersion` 是原生核心协议版本，应用版本看 `pubspec.yaml` 与镜像标签。首页的 `auth` 字段会按当前环境如实说明：留空 `TOKEN` 时显示“未设置 TOKEN：全部接口都不校验令牌”，设置后显示“已启用 TOKEN”，并给出 `authRequired` 布尔值。
 
 请求体就是客户端发给原生核心的内容，返回 `{"ok":true,"data":…}` 或 `{"ok":false,"error":…}`：
 
@@ -744,7 +747,7 @@ curl -s -X POST http://127.0.0.1:8080/api/request -H 'Content-Type: application/
 
 ### 运维提示
 
-- 只在内网使用时可留空 `TOKEN`；对公网开放必须设置 `TOKEN`，并放在 HTTPS 反向代理之后。
+- 只在内网使用时可留空 `TOKEN`，此时首页会明确提示“未设置 TOKEN：全部接口都不校验令牌”；对公网开放必须设置 `TOKEN`，并放在 HTTPS 反向代理之后。
 - 服务需要能直连各站源；出口受限或源站限制会直接返回 `ok:false` 与错误原因。
 - 数据目录保存缓存与会话，备份该卷即可；升级镜像不会清除卷数据。
 - 容器内默认以 root 运行；需要降权时可在 compose 中加 `user: "1000:1000"` 并保证 `/data` 可写。
@@ -1012,6 +1015,8 @@ unzip ../真果·鉴-YYYYMMDDHHMM.zip -d ../restore
 | 平台工程 | Android 三架构、Windows / iOS 构建脚本、TV 布局与遥控；0.2.29 补强电视自动识别与统一横屏，待集中验证；国内依赖镜像、源码版本快照 |
 
 ### 当前检查与平台状态
+
+0.2.52+58 修正 Docker 服务的鉴权提示：首页 `auth` 字段此前无论是否设置 `TOKEN` 都显示同一条“设置 TOKEN 后…”说明，留空令牌时容易误解；现在按实际环境区分——未设置时提示“未设置 TOKEN：全部接口都不校验令牌，请只在可信的内网或反向代理后使用”，设置后提示“已启用 TOKEN：除 `GET /healthz` 与 `GET /` 外，其余请求都要带 `Authorization: Bearer 令牌`”，并新增 `authRequired` 布尔值；文案不再包含尖括号，避免 JSON 转义成 `\u003c`。README 同步说明 `coreVersion` 是原生核心协议版本（当前 `0.2.17`），与应用版本、镜像标签区分。已执行 `go vet ./native/server`、`go test ./native/server`（8 项通过），并用本地构建的二进制分别以空 `TOKEN` 与已设置 `TOKEN` 启动服务，确认首页说明、`authRequired` 与无令牌访问 `/api/sources` 返回 401 的行为；容器与镜像验证仍由 Actions 的 `docker` 任务覆盖。
 
 0.2.51+57 新增可选的 Docker 部署形态：`native/server` 把原生核心的全部操作（站源列表、目录、搜索、详情、播放解析等）以 HTTP 服务暴露，协议与客户端原生核心一致（`POST /api/request` 收发同一份 JSON）；根目录 `Dockerfile` 以 `CGO_ENABLED=0` 静态链接、按全站源参数构建，运行时为 alpine + CA 证书，数据目录挂载 `/data`。服务提供 `GET /healthz`、`GET /api/actions`、`GET /api/sources`，设置 `TOKEN` 后除健康检查外都要求 `Authorization: Bearer`，并限制请求体 1 MiB、并发上限与优雅退出；`scripts/package_docker_source.py` 生成 `dist/docker/zhenguojian-docker-source-<版本>.tar.gz` 纯源码包，可直接发给他人 `docker compose up -d --build`。已执行 `go vet ./native/server`、`go test ./native/server`（7 项通过）、`CGO_ENABLED=0 go build -ldflags "-X duanjuapp/native/core.buildAllSources=true" ./server`，并在本机运行服务冒烟验证 `/healthz`（`allSources:true`）、`/api/sources`（8 个站源）、`/api/request` 与首页；`python -m unittest discover -s scripts` 覆盖新增打包脚本。本机未安装 Docker，镜像构建与容器冒烟由 Actions 的 `docker` 任务验证，尚未在真实服务器上部署。
 
