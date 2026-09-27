@@ -225,6 +225,12 @@ jobs:
           grep -q '"ok":true' health.json
           grep -q '"allSources":true' health.json
           curl -fsS -H 'Authorization: Bearer ci-token' http://127.0.0.1:18080/api/sources | grep -q '"dsd"'
+          curl -fsS -H 'Authorization: Bearer ci-token' http://127.0.0.1:18080/api/info | grep -q '"page":"/"'
+          curl -fsS http://127.0.0.1:18080/ > page.html
+          grep -q '真果鉴' page.html
+          grep -q '/hls.min.js' page.html
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/hls.min.js)" = "200"
+          test "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:18080/media/000000000000000000000000000000000000000000000000/000000000000000000000000.ts?token=ci-token")" = "404"
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/sources)" = "401"
           docker logs zhenguojian-core
           docker rm -f zhenguojian-core

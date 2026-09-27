@@ -180,19 +180,43 @@ func TestTokenGuardsApiButNotHealth(t *testing.T) {
 	}
 }
 
+func TestPageAndInfoDescribeService(t *testing.T) {
+	instance := newTestService(t, "", 4)
+	status, body := reply(t, instance, http.MethodGet, "/", "", nil)
+	if status != http.StatusOK || !strings.Contains(body, "真果鉴") || !strings.Contains(body, "/hls.min.js") {
+		t.Fatalf("网页未正确返回：%d %s", status, body[:min(len(body), 120)])
+	}
+	status, body = reply(t, instance, http.MethodGet, "/hls.min.js", "", nil)
+	if status != http.StatusOK || len(body) < 10000 {
+		t.Fatalf("hls.js 未随镜像内置：%d %d", status, len(body))
+	}
+	status, body = reply(t, instance, http.MethodGet, "/api/info", "", nil)
+	if status != http.StatusOK || !strings.Contains(body, `"authRequired":false`) || !strings.Contains(body, `"page":"/"`) {
+		t.Fatalf("/api/info 内容异常：%d %s", status, body)
+	}
+	status, body = reply(t, instance, http.MethodGet, "/does-not-exist", "", nil)
+	if status != http.StatusNotFound || !strings.Contains(body, "接口不存在") {
+		t.Fatalf("未知路径应返回 JSON 404：%d %s", status, body)
+	}
+}
+
 func TestIndexDescribesAuthState(t *testing.T) {
 	open := newTestService(t, "", 4)
-	status, body := reply(t, open, http.MethodGet, "/", "", nil)
+	status, body := reply(t, open, http.MethodGet, "/api/info", "", nil)
 	if status != http.StatusOK || !strings.Contains(body, "未设置 TOKEN") || !strings.Contains(body, `"authRequired":false`) {
-		t.Fatalf("未设置令牌时首页说明不正确：%d %s", status, body)
+		t.Fatalf("未设置令牌时说明不正确：%d %s", status, body)
 	}
 	guarded := newTestService(t, "secret-token", 4)
-	status, body = reply(t, guarded, http.MethodGet, "/", "", nil)
+	status, body = reply(t, guarded, http.MethodGet, "/api/info", "", nil)
 	if status != http.StatusOK || !strings.Contains(body, "已启用 TOKEN") || !strings.Contains(body, `"authRequired":true`) {
-		t.Fatalf("已设置令牌时首页说明不正确：%d %s", status, body)
+		t.Fatalf("已设置令牌时说明不正确：%d %s", status, body)
 	}
 	if strings.Contains(body, "secret-token") {
-		t.Fatalf("首页不应泄露令牌：%s", body)
+		t.Fatalf("接口说明不应泄露令牌：%s", body)
+	}
+	status, body = reply(t, guarded, http.MethodGet, "/", "", nil)
+	if status != http.StatusOK || !strings.Contains(body, "真果鉴") {
+		t.Fatalf("网页本身不需要令牌：%d %s", status, body[:min(len(body), 120)])
 	}
 }
 

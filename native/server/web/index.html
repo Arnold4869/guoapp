@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>真果鉴 · 服务</title>
+<style>
+:root { color-scheme: dark; --bg:#101216; --panel:#181b21; --line:#262a32; --text:#e8eaee; --muted:#98a0ad; --accent:#ff765f; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif; }
+header { position:sticky; top:0; z-index:5; display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:10px 14px; background:rgba(16,18,22,.94); border-bottom:1px solid var(--line); backdrop-filter:blur(6px); }
+.brand { font-weight:800; letter-spacing:.5px; margin-right:6px; }
+.brand span { color:var(--accent); }
+select,input,button { font:inherit; color:var(--text); background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:8px 10px; }
+button { cursor:pointer; }
+button.primary { background:var(--accent); border-color:var(--accent); color:#1a1207; font-weight:700; }
+button:disabled { opacity:.5; cursor:default; }
+input#query { flex:1 1 180px; min-width:140px; }
+main { padding:14px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; cursor:pointer; display:flex; flex-direction:column; gap:6px; }
+.card:hover { border-color:var(--accent); }
+.card h3 { margin:0; font-size:15px; }
+.card p { margin:0; color:var(--muted); font-size:13px; }
+.tag { display:inline-block; padding:1px 7px; border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:12px; }
+.episodes { display:grid; grid-template-columns:repeat(auto-fill,minmax(74px,1fr)); gap:8px; margin:12px 0; }
+.episode { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:9px 4px; text-align:center; cursor:pointer; font-size:14px; }
+.episode:hover { border-color:var(--accent); }
+.episode.vip { color:#ffd479; }
+.episode.current { border-color:var(--accent); background:#2a1c18; }
+.row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+.muted { color:var(--muted); }
+.player { width:100%; background:#000; border-radius:12px; max-height:70vh; aspect-ratio:16/9; }
+.back { margin-bottom:10px; }
+.status { position:fixed; left:14px; right:14px; bottom:14px; padding:10px 12px; border-radius:10px; background:#2a1512; border:1px solid #5b2b23; color:#ffd9d1; display:none; white-space:pre-wrap; }
+.status.show { display:block; }
+.spinner { color:var(--muted); padding:14px; }
+dialog { border:1px solid var(--line); border-radius:12px; background:var(--panel); color:var(--text); padding:18px; max-width:360px; }
+dialog::backdrop { background:rgba(0,0,0,.6); }
+dialog input { width:100%; margin:10px 0; }
+h2 { margin:0 0 6px; font-size:19px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">真果鉴<span>·服务</span></div>
+  <select id="source" title="站源"></select>
+  <input id="query" placeholder="搜索剧名" autocomplete="off">
+  <button id="search" class="primary">搜索</button>
+  <button id="home">首页</button>
+  <button id="token-button" hidden>令牌</button>
+</header>
+<main id="view"><div class="spinner">加载中…</div></main>
+<div id="status" class="status"></div>
+<dialog id="token-dialog">
+  <h2>访问令牌</h2>
+  <p class="muted">服务已启用 TOKEN，请在下方填入相同令牌；只保存在本机浏览器。</p>
+  <input id="token-input" type="password" placeholder="Bearer 令牌">
+  <div class="row" style="margin:0">
+    <button id="token-save" class="primary">保存</button>
+    <button id="token-clear">清除</button>
+  </div>
+</dialog>
+<video id="player" class="player" style="display:none" controls playsinline></video>
+<script src="/hls.min.js"></script>
+<script>
+const state = { source:'', query:'', page:1, hasMore:false, items:[], drama:null, chapters:[], index:0, plan:null, hls:null, loading:false };
+const view = document.getElementById('view');
+const sourceSelect = document.getElementById('source');
+const queryInput = document.getElementById('query');
+const statusBox = document.getElementById('status');
+const player = document.getElementById('player');
+let sequence = 0;
+
+const token = () => localStorage.getItem('zgj-token') || '';
+const headers = () => Object.assign({'Content-Type':'application/json'}, token() ? {Authorization:'Bearer ' + token()} : {});
+
+function showStatus(message) {
+  statusBox.textContent = message || '';
+  statusBox.classList.toggle('show', Boolean(message));
+}
+
+async function api(path, options) {
+  const response = await fetch(path, options);
+  if (response.status === 401) { askToken(); throw new Error('访问令牌无效或缺失'); }
+  const payload = await response.json();
+  if (!payload.ok) throw new Error(payload.error || '请求失败');
+  return payload.data;
+}
+
+const call = (body) => api('/api/request', { method:'POST', headers:headers(), body:JSON.stringify(body) });
+
+async function loadInfo() {
+  try {
+    const response = await fetch('/api/info');
+    const info = await response.json();
+    if (info.authRequired && !token()) askToken();
+  } catch (error) { showStatus(String(error.message || error)); }
+}
+
+function askToken() { document.getElementById('token-dialog').showModal(); }
+
+async function loadSources() {
+  const data = await api('/api/sources', { headers:headers() });
+  sourceSelect.innerHTML = '';
+  for (const item of data.items) {
+    const option = document.createElement('option');
+    option.value = item.id;
+    option.textContent = item.name;
+    sourceSelect.appendChild(option);
+  }
+  state.source = data.items.length ? data.items[0].id : '';
+}
+
+async function loadCatalog(append) {
+  if (!state.source || state.loading) return;
+  state.loading = true;
+  if (!append) { state.page = 1; state.items = []; view.innerHTML = '<div class="spinner">加载中…</div>'; }
+  try {
+    const data = await call({ action:'catalog', source:state.source, category:'', query:state.query, page:state.page });
+    state.items = append ? state.items.concat(data.items) : data.items;
+    state.hasMore = Boolean(data.hasMore);
+    if (data.warning) showStatus(data.warning);
+    renderCatalog();
+  } catch (error) {
+    showStatus('目录加载失败：' + (error.message || error));
+    if (!append) view.innerHTML = '<div class="spinner">目录加载失败</div>';
+  } finally { state.loading = false; }
+}
+
+function renderCatalog() {
+  view.innerHTML = '';
+  if (!state.items.length) { view.innerHTML = '<div class="spinner">没有结果</div>'; return; }
+  const grid = document.createElement('div');
+  grid.className = 'grid';
+  for (const drama of state.items) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    const title = document.createElement('h3');
+    title.textContent = drama.title || drama.id;
+    const meta = document.createElement('p');
+    meta.textContent = [drama.category, drama.episodes ? drama.episodes + ' 集' : '', drama.vip ? 'VIP' : ''].filter(Boolean).join(' · ');
+    card.append(title, meta);
+    card.onclick = () => openDetail(drama);
+    grid.appendChild(card);
+  }
+  view.appendChild(grid);
+  if (state.hasMore) {
+    const more = document.createElement('button');
+    more.textContent = '加载更多';
+    more.style.marginTop = '12px';
+    more.onclick = () => { state.page += 1; loadCatalog(true); };
+    view.appendChild(more);
+  }
+}
+
+async function openDetail(drama) {
+  stopPlayback();
+  state.drama = drama;
+  view.innerHTML = '<div class="spinner">读取剧集…</div>';
+  try {
+    const data = await call({ action:'detail', drama });
+    state.chapters = data.chapters || [];
+    renderDetail(data);
+  } catch (error) {
+    showStatus('详情加载失败：' + (error.message || error));
+    view.innerHTML = '<div class="spinner">详情加载失败</div>';
+  }
+}
+
+function renderDetail(data) {
+  view.innerHTML = '';
+  const back = document.createElement('button');
+  back.textContent = '← 返回列表';
+  back.className = 'back';
+  back.onclick = () => { stopPlayback(); renderCatalog(); };
+
+  const title = document.createElement('h2');
+  title.textContent = (data.drama && data.drama.title) || state.drama.title || '';
+
+  const meta = document.createElement('p');
+  meta.className = 'muted';
+  const description = (data.drama && data.drama.description) || '';
+  meta.textContent = [state.chapters.length + ' 集', description].filter(Boolean).join(' · ');
+
+  const episodes = document.createElement('div');
+  episodes.className = 'episodes';
+  state.chapters.forEach((chapter, position) => {
+    const button = document.createElement('div');
+    button.className = 'episode' + (chapter.vip ? ' vip' : '');
+    button.textContent = (chapter.title || (chapter.currentEpisode || position + 1)) + (chapter.vip ? ' · VIP' : '');
+    button.onclick = () => playEpisode(position);
+    episodes.appendChild(button);
+  });
+  view.append(back, title, meta, episodes);
+  if (data.warning) showStatus(data.warning);
+}
+
+function episodeNumber(chapter, position) {
+  const value = Number(chapter.currentEpisode);
+  return value > 0 ? value : position + 1;
+}
+
+async function playEpisode(position) {
+  const chapter = state.chapters[position];
+  if (!chapter) return;
+  state.index = position;
+  showStatus('');
+  player.style.display = 'block';
+  try {
+    const plan = await call({ action:'resolve', drama:state.drama, chapter, index:episodeNumber(chapter, position), quality:0, sequence:++sequence });
+    state.plan = plan;
+    attach(plan.url);
+    renderPlayerBar(position);
+  } catch (error) {
+    player.style.display = 'none';
+    showStatus('播放失败：' + (error.message || error));
+  }
+}
+
+function attach(url) {
+  if (state.hls) { state.hls.destroy(); state.hls = null; }
+  const isHls = /\.m3u8(\?|$)/.test(url);
+  if (isHls && window.Hls && window.Hls.isSupported()) {
+    state.hls = new window.Hls({ lowLatencyMode:false });
+    state.hls.loadSource(url);
+    state.hls.attachMedia(player);
+    state.hls.on(window.Hls.Events.ERROR, (_, data) => { if (data && data.fatal) showStatus('播放出错：' + data.details); });
+  } else {
+    player.src = url;
+  }
+  player.play().catch(() => {});
+}
+
+function renderPlayerBar(position) {
+  const bar = document.getElementById('player-bar') || document.createElement('div');
+  bar.id = 'player-bar';
+  bar.className = 'row';
+  bar.innerHTML = '';
+  const label = document.createElement('span');
+  label.textContent = (state.chapters[position] && (state.chapters[position].title || '第 ' + episodeNumber(state.chapters[position], position) + ' 集')) || '';
+  const previous = document.createElement('button');
+  previous.textContent = '上一集';
+  previous.disabled = position <= 0;
+  previous.onclick = () => playEpisode(position - 1);
+  const next = document.createElement('button');
+  next.textContent = '下一集';
+  next.disabled = position >= state.chapters.length - 1;
+  next.onclick = () => playEpisode(position + 1);
+  const back = document.createElement('button');
+  back.textContent = '返回选集';
+  back.onclick = () => { stopPlayback(); renderDetail({ drama:state.drama, chapters:state.chapters }); };
+  bar.append(label, previous, next, back);
+  player.insertAdjacentElement('afterend', bar);
+}
+
+function stopPlayback() {
+  if (state.hls) { state.hls.destroy(); state.hls = null; }
+  player.pause();
+  player.removeAttribute('src');
+  player.load();
+  player.style.display = 'none';
+  const bar = document.getElementById('player-bar');
+  if (bar) bar.remove();
+  if (state.plan && state.plan.session) call({ action:'release', session:state.plan.session }).catch(() => {});
+  state.plan = null;
+}
+
+document.getElementById('search').onclick = () => { state.query = queryInput.value.trim(); loadCatalog(false); };
+queryInput.addEventListener('keydown', (event) => { if (event.key === 'Enter') { state.query = queryInput.value.trim(); loadCatalog(false); } });
+sourceSelect.onchange = () => { state.source = sourceSelect.value; loadCatalog(false); };
+document.getElementById('home').onclick = () => { stopPlayback(); loadCatalog(false); };
+document.getElementById('token-button').onclick = () => askToken();
+document.getElementById('token-save').onclick = () => {
+  localStorage.setItem('zgj-token', document.getElementById('token-input').value.trim());
+  document.getElementById('token-dialog').close();
+  start();
+};
+document.getElementById('token-clear').onclick = () => {
+  localStorage.removeItem('zgj-token');
+  document.getElementById('token-dialog').close();
+  showStatus('已清除本机令牌');
+};
+
+async function start() {
+  let info = {};
+  try { info = await fetch('/api/info').then((response) => response.json()); } catch (error) {}
+  const authRequired = Boolean(info.authRequired);
+  document.getElementById('token-button').hidden = !authRequired;
+  if (authRequired && !token()) {
+    view.innerHTML = '<div class="spinner">请先填写访问令牌</div>';
+    askToken();
+    return;
+  }
+  view.innerHTML = '<div class="spinner">加载中…</div>';
+  try {
+    await loadSources();
+    await loadCatalog(false);
+  } catch (error) {
+    showStatus('初始化失败：' + (error.message || error));
+  }
+}
+
+start();
+</script>
+</body>
+</html>

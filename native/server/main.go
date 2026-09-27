@@ -33,11 +33,12 @@ type envelope struct {
 }
 
 type service struct {
-	token   string
-	dataDir string
-	slots   chan struct{}
-	started time.Time
-	edition map[string]any
+	token      string
+	dataDir    string
+	streamBase string
+	slots      chan struct{}
+	started    time.Time
+	edition    map[string]any
 }
 
 func env(key, fallback string) string {
@@ -58,11 +59,15 @@ func bearer(request *http.Request) string {
 	return strings.TrimSpace(request.Header.Get("X-Auth-Token"))
 }
 
+func constantTimeEqual(value, expected string) bool {
+	return subtle.ConstantTimeCompare([]byte(value), []byte(expected)) == 1
+}
+
 func (s *service) authorize(request *http.Request) bool {
 	if s.token == "" {
 		return true
 	}
-	return subtle.ConstantTimeCompare([]byte(bearer(request)), []byte(s.token)) == 1
+	return constantTimeEqual(bearer(request), s.token)
 }
 
 func (s *service) enter() bool {
@@ -110,25 +115,32 @@ func (s *service) authHint() string {
 	if s.token == "" {
 		return "未设置 TOKEN：全部接口都不校验令牌，请只在可信的内网或反向代理后使用"
 	}
-	return "已启用 TOKEN：除 GET /healthz 与 GET / 外，其余请求都要带 Authorization: Bearer 令牌"
+	return "已启用 TOKEN：除 GET /healthz、GET /api/info 与网页静态资源外，其余请求都要带 Authorization: Bearer 令牌"
 }
 
-func (s *service) index(writer http.ResponseWriter, request *http.Request) {
+func (s *service) info(writer http.ResponseWriter, request *http.Request) {
 	writeJSON(writer, http.StatusOK, map[string]any{
 		"ok":           true,
 		"service":      serviceName,
 		"coreVersion":  s.edition["version"],
 		"edition":      map[string]any{"allSources": s.edition["allSources"]},
 		"authRequired": s.token != "",
+		"page":         "/",
 		"endpoints": []string{
 			"GET /healthz",
+			"GET /api/info",
 			"GET /api/actions",
 			"GET /api/sources",
 			"POST /api/request",
+			"GET /media/会话/资源",
 		},
 		"request": "POST /api/request 使用与客户端原生核心一致的 JSON：{\"action\":\"catalog\",\"source\":\"hongguo\",\"page\":1}",
 		"auth":    s.authHint(),
 	})
+}
+
+func (s *service) notFound(writer http.ResponseWriter, request *http.Request) {
+	writeFailure(writer, http.StatusNotFound, "接口不存在")
 }
 
 func (s *service) actions(writer http.ResponseWriter, request *http.Request) {
@@ -157,7 +169,7 @@ func (s *service) dispatch(writer http.ResponseWriter, request *http.Request, pa
 		return
 	}
 	defer s.leave()
-	writeRaw(writer, http.StatusOK, core.NativeRequest(payload))
+	writeRaw(writer, http.StatusOK, s.rewritePlan(core.NativeRequest(payload)))
 }
 
 func (s *service) call(writer http.ResponseWriter, request *http.Request) {
@@ -204,11 +216,16 @@ func (recorder *statusRecorder) Write(body []byte) (int, error) {
 
 func (s *service) routes() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /{$}", s.page)
+	mux.HandleFunc("GET /hls.min.js", s.script)
 	mux.HandleFunc("GET /healthz", s.health)
-	mux.HandleFunc("GET /", s.index)
+	mux.HandleFunc("GET /api/info", s.info)
 	mux.HandleFunc("GET /api/actions", s.actions)
 	mux.HandleFunc("GET /api/sources", s.sources)
 	mux.HandleFunc("POST /api/request", s.call)
+	mux.HandleFunc("GET /media/", s.mediaHandler)
+	mux.HandleFunc("HEAD /media/", s.mediaHandler)
+	mux.HandleFunc("/", s.notFound)
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		started := time.Now()
 		recorder := &statusRecorder{ResponseWriter: writer}
@@ -285,7 +302,7 @@ func main() {
 		Handler:           instance.routes(),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       60 * time.Second,
-		WriteTimeout:      120 * time.Second,
+		WriteTimeout:      0,
 	}
 	go func() {
 		log.Printf("%s 已启动：%s，数据目录 %s，全站源 %v，访问令牌 %v，并发上限 %d",

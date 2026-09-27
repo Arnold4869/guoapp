@@ -2,7 +2,7 @@
 
 > 本仓库源码 fork 自 [enginJie/guoapp](https://github.com/enginJie/guoapp)，在此基础上继续维护设备端实现、打包流程与 Docker 部署形态。
 
-Flutter 多端独立短剧应用，原名“短剧库 APP”。站源请求、解析、下载和播放均在设备上完成，不依赖旧项目或自建服务。当前源码版本：**0.2.52+58（未验证开发快照）**。本轮修正 Docker 服务首页的鉴权提示：留空 `TOKEN` 时明确说明“全部接口都不校验令牌”，设置后说明需要 `Authorization: Bearer`，并新增 `authRequired` 字段。上一轮新增可选的 Docker 部署形态：`native/server` 把同一个原生核心以 HTTP 服务暴露（协议与客户端一致），根目录 `Dockerfile` 固定按全站源版构建，`scripts/package_docker_source.py` 生成可直接发给他人部署的纯源码包；App 本身仍是设备端应用，不依赖该服务。本轮另修复 GitHub Actions 首轮 `checks` 失败并让两版 Android 与 iOS 任务产出产物。上一轮新增管理员“启动时需要登录”开关：设置管理员密码后仍默认保持启动登录，管理员可在用户管理中关闭；关闭后保留密码保护，只在切换用户或手动锁定时验证。更早一轮核对剧果、野果、帝果的目录分页、榜单和播放解析链路：多站源更新默认批量 50 页，野果目录 / 搜索 / 播放使用 POST，剧果保留 CloudFront 签名 Cookie 到播放列表、分片、预加载和下载，帝果 vplayer 签名失败不再静默回退到未签名地址；野果运行时固定优先使用当前线路 `https://analyze.buxefaex.cc/`，通过 `https://ygdj7.com/` 发现新线路，旧域名仅保留缓存与身份兼容识别。本轮只维护源码和定向测试，不打包 APK、不安装设备、不做真实播放验收。
+Flutter 多端独立短剧应用，原名“短剧库 APP”。站源请求、解析、下载和播放均在设备上完成，不依赖旧项目或自建服务。当前源码版本：**0.2.53+59（未验证开发快照）**。本轮给 Docker 服务加上网页播放界面：浏览器打开即为站源选择、搜索、目录、详情选集与 HLS 播放器，媒体由服务端按站源要求取流后经 `/media/` 转发，`hls.js` 随镜像内置。上一轮修正该服务首页的鉴权提示并区分令牌状态。更早一轮新增可选的 Docker 部署形态：`native/server` 把同一个原生核心以 HTTP 服务暴露（协议与客户端一致），根目录 `Dockerfile` 固定按全站源版构建，`scripts/package_docker_source.py` 生成可直接发给他人部署的纯源码包；App 本身仍是设备端应用，不依赖该服务。本轮另修复 GitHub Actions 首轮 `checks` 失败并让两版 Android 与 iOS 任务产出产物。上一轮新增管理员“启动时需要登录”开关：设置管理员密码后仍默认保持启动登录，管理员可在用户管理中关闭；关闭后保留密码保护，只在切换用户或手动锁定时验证。更早一轮核对剧果、野果、帝果的目录分页、榜单和播放解析链路：多站源更新默认批量 50 页，野果目录 / 搜索 / 播放使用 POST，剧果保留 CloudFront 签名 Cookie 到播放列表、分片、预加载和下载，帝果 vplayer 签名失败不再静默回退到未签名地址；野果运行时固定优先使用当前线路 `https://analyze.buxefaex.cc/`，通过 `https://ygdj7.com/` 发现新线路，旧域名仅保留缓存与身份兼容识别。本轮只维护源码和定向测试，不打包 APK、不安装设备、不做真实播放验收。
 
 按用户 2026-09-21 的要求，继续暂停整体验证。启动、榜单、画质增强、站源改名、画中画、连续播放控制栏、红果系列剧提醒、播放器 Tab 化、首页 / 播放页优化、多站源站源修复和本轮启动登录开关均保留未验证快照状态；本轮只执行源码级定向检查，未完成真实设备视觉验收、Release APK、IPA 或真实站源播放验收。历史版本的检查记录不能作为本轮新增功能的验收结论。
 
@@ -648,7 +648,7 @@ SR-1、SR-2 与 SR-4 已接入源码，小型动漫 CNN 也包含在本轮；SR-
 | `hongguojian-windows` | `zhenguojian-windows` | 完整 ZIP 和 SHA256；从解压包检查原生核心、FFprobe、换封装及播放器启动 |
 | `hongguojian-ios-unsigned` | `zhenguojian-ios-unsigned` | 未签名 `.app` ZIP 和 SHA256，不能直接当已签名 IPA 安装 |
 
-Actions 分别传入默认参数与 `--all-sources` 构建两版，Flutter 和 Go 回归也覆盖两种编译配置。产物保留 14 天，不自动创建 GitHub Release。首次平台构建结果以实际 Actions 输出为准。另有 `docker` 任务：按根目录 `Dockerfile` 构建全站源服务镜像，并在容器内冒烟检查 `/healthz`、`/api/sources` 与令牌校验。
+Actions 分别传入默认参数与 `--all-sources` 构建两版，Flutter 和 Go 回归也覆盖两种编译配置。产物保留 14 天，不自动创建 GitHub Release。首次平台构建结果以实际 Actions 输出为准。另有 `docker` 任务：按根目录 `Dockerfile` 构建全站源服务镜像，并在容器内冒烟检查 `/healthz`、`/api/sources`、`/api/info`、网页与 `hls.js` 是否可访问、`/media/` 非法路径与未授权请求的状态码。
 
 Android 正式发布持续使用同一签名并递增构建号，在仓库 Secrets 配置：
 
@@ -676,9 +676,9 @@ keyPassword=你的密码
 
 ## Docker 服务部署
 
-可选方案：把原生核心（站源请求、目录与详情解析、播放地址解析）作为独立 HTTP 服务跑在服务器上，供自己在多设备或脚本中调用。它与客户端应用是两套入口：App 默认仍在设备端完成全部请求与解析，不依赖这个服务；只有显式调用该接口的客户端才会使用它。
+可选方案：把原生核心（站源请求、目录与详情解析、播放地址解析、媒体转发）作为独立 HTTP 服务跑在服务器上，浏览器打开即有一个可浏览、可搜索、可播放的网页，脚本也可以直接调同一套 JSON 接口。它与客户端应用是两套入口：App 默认仍在设备端完成全部请求与解析，不依赖这个服务；只有显式调用该接口的客户端才会使用它。
 
-镜像由仓库根目录的 `Dockerfile` 构建，编译参数固定为全站源版（`-X duanjuapp/native/core.buildAllSources=true`），运行时数据写入 `/data` 卷。
+镜像由仓库根目录的 `Dockerfile` 构建，编译参数固定为全站源版（`-X duanjuapp/native/core.buildAllSources=true`），运行时数据写入 `/data` 卷。服务内置播放页与 `hls.js`（不依赖外网 CDN），播放时由服务端按站源需要的请求头、签名 Cookie 与密钥取流，再通过 `/media/` 转发给浏览器。
 
 ### 发给他人部署的源码包
 
@@ -696,6 +696,8 @@ docker compose up -d --build
 curl -s http://127.0.0.1:8080/healthz
 ~~~
 
+部署完成后浏览器打开 `http://服务器地址:8080/`：顶部选择站源、输入剧名搜索，点卡片进入剧集详情，点某一集即开始播放；播放器下方有上一集 / 下一集 / 返回选集。设置过 `TOKEN` 时，页面会先要求填入同一令牌（只存在浏览器本地）。
+
 不用 compose 时：
 
 ~~~sh
@@ -710,8 +712,8 @@ docker run -d --name zhenguojian-core --restart unless-stopped -p 8080:8080 \
 | --- | --- | --- |
 | `PORT` | `8080` | 容器内监听端口；compose 中映射到主机 `PORT` |
 | `DATA_DIR` | `/data` | 缓存、会话与下载记录目录，需挂载卷 |
-| `TOKEN` | 空 | 留空则全部接口开放；设置后除 `GET /healthz`、`GET /` 外的接口都要带 `Authorization: Bearer 令牌` |
-| `MAX_CONCURRENCY` | `8` | 同时处理的请求数上限（1–64），超出返回 429 |
+| `TOKEN` | 空 | 留空则全部接口与播放免令牌；设置后除 `GET /healthz`、`GET /api/info`、网页与 `hls.js` 外都要带 `Authorization: Bearer 令牌`，媒体请求用 `?token=` |
+| `MAX_CONCURRENCY` | `8` | 同时处理的接口请求数上限（1–64），超出返回 429；媒体转发不计入 |
 | `TZ` | `Asia/Shanghai` | 时区 |
 | `GOPROXY` | `https://goproxy.cn,direct` | 仅构建期使用 |
 
@@ -719,13 +721,16 @@ docker run -d --name zhenguojian-core --restart unless-stopped -p 8080:8080 \
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
+| GET | `/` | 网页播放界面；不校验令牌 |
+| GET | `/hls.min.js` | 内置播放器库，随镜像提供 |
 | GET | `/healthz` | 健康检查：编译版本、站源范围、运行时长；不校验令牌 |
-| GET | `/` | 服务首页：接口清单、当前鉴权状态；不校验令牌 |
+| GET | `/api/info` | 服务信息、接口清单、当前鉴权状态；不校验令牌 |
 | GET | `/api/actions` | 支持的操作与说明 |
 | GET | `/api/sources` | 当前编译版本可用的站源 |
 | POST | `/api/request` | 与客户端原生核心一致的 JSON 协议 |
+| GET | `/media/会话/资源` | 播放列表与分片转发，`resolve` 返回的地址即为该路径 |
 
-首页和 `/healthz` 里的 `coreVersion` 是原生核心协议版本，应用版本看 `pubspec.yaml` 与镜像标签。首页的 `auth` 字段会按当前环境如实说明：留空 `TOKEN` 时显示“未设置 TOKEN：全部接口都不校验令牌”，设置后显示“已启用 TOKEN”，并给出 `authRequired` 布尔值。
+`/api/info` 与 `/healthz` 里的 `coreVersion` 是原生核心协议版本，应用版本看 `pubspec.yaml` 与镜像标签。`/api/info` 的 `auth` 字段会按当前环境如实说明：留空 `TOKEN` 时显示“未设置 TOKEN：全部接口都不校验令牌”，设置后显示“已启用 TOKEN”，并给出 `authRequired` 布尔值。
 
 请求体就是客户端发给原生核心的内容，返回 `{"ok":true,"data":…}` 或 `{"ok":false,"error":…}`：
 
@@ -741,13 +746,25 @@ curl -s -X POST http://127.0.0.1:8080/api/request -H 'Content-Type: application/
 
 curl -s -X POST http://127.0.0.1:8080/api/request -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer 换成自己的令牌' -d '{"action":"detail","drama":{"id":"hongguo:1234"}}'
+
+curl -s -X POST http://127.0.0.1:8080/api/request -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer 换成自己的令牌' \
+  -d '{"action":"resolve","drama":{"id":"hongguo:1234"},"chapter":{"id":"…","currentEpisode":1},"index":1,"quality":0,"sequence":1}'
 ~~~
 
-`resolve` 返回播放地址与所需请求头，媒体仍由调用方按地址取流；服务不代为下载或保存视频。
+`resolve` 返回的 `url` 会被服务改写为 `/media/…`，浏览器或播放器据此取流；播放结束或切集时可调用 `{"action":"release","session":"<resolve 返回的 session>"}` 释放会话。服务只做解析与转发，不代为下载或保存视频，也不生成海报图。
+
+### 网页使用与限制
+
+- 浏览器兼容：Chrome / Edge / Firefox 用内置 `hls.js` 播放 HLS，Safari 与 iOS 走原生 HLS；`mp4` 直链直接播放。
+- 暂不显示海报图（页面只列剧名、分类与集数），避免额外抓取站源图片。
+- 部分分集是 VIP 试看、需要登录或受源站地区限制，解析会直接失败并在页面底部提示原因；换站源或换集再试。
+- 播放是“服务器拉流 + 浏览器取流”，会占用服务器带宽；同时观看人数多时建议提高 `MAX_CONCURRENCY` 并在反向代理上限速。
+- 播放会话默认闲置 10 分钟回收，单次进程最多 8 个播放会话；重新点一次该集即可重新解析。
 
 ### 运维提示
 
-- 只在内网使用时可留空 `TOKEN`，此时首页会明确提示“未设置 TOKEN：全部接口都不校验令牌”；对公网开放必须设置 `TOKEN`，并放在 HTTPS 反向代理之后。
+- 只在内网使用时可留空 `TOKEN`，此时页面可直接打开；对公网开放必须设置 `TOKEN`，并放在 HTTPS 反向代理之后（页面与媒体同源，不会有混合内容问题）。
 - 服务需要能直连各站源；出口受限或源站限制会直接返回 `ok:false` 与错误原因。
 - 数据目录保存缓存与会话，备份该卷即可；升级镜像不会清除卷数据。
 - 容器内默认以 root 运行；需要降权时可在 compose 中加 `user: "1000:1000"` 并保证 `/data` 可写。
@@ -1015,6 +1032,8 @@ unzip ../真果·鉴-YYYYMMDDHHMM.zip -d ../restore
 | 平台工程 | Android 三架构、Windows / iOS 构建脚本、TV 布局与遥控；0.2.29 补强电视自动识别与统一横屏，待集中验证；国内依赖镜像、源码版本快照 |
 
 ### 当前检查与平台状态
+
+0.2.53+59 给 Docker 服务加入网页播放界面：`GET /` 返回内置单页（站源选择、搜索、目录分页、详情选集、播放器与上一集 / 下一集 / 返回选集），`GET /hls.min.js` 随镜像内置 `hls.js 1.7.3`（Apache-2.0，附 `web/hls.LICENSE`），不依赖外网 CDN。媒体经 `GET /media/会话/资源` 转发：`resolve` 返回的核心本地流地址在服务端改写为 `/media/…`，播放列表内的分片、密钥与子列表链接同步改写，Range 请求透传，启用 `TOKEN` 时媒体链接带 `?token=`；`GET /api/info` 提供机器可读的服务信息（原 JSON 首页移到这里），未知路径返回 JSON 404，媒体转发不计入并发上限并把 `WriteTimeout` 放开以便长连接取流。核心侧只新增导出函数 `NativeStreamBase()`。已执行 `go vet ./...`、`go test ./native/server`（13 项通过，含播放列表改写、Range 透传、令牌校验、播放地址改写与非法路径拒绝），并用本地构建的二进制实际启动服务：`GET /` 返回 13 KB 页面且含页面标记与 `/hls.min.js`、`GET /hls.min.js` 返回 619692 字节、`GET /api/info` 鉴权说明正确、非法媒体路径与未知路径均为 404。真实站源播放（浏览器点开某一集）与容器内播放链路尚未验证，需在部署机上确认。
 
 0.2.52+58 修正 Docker 服务的鉴权提示：首页 `auth` 字段此前无论是否设置 `TOKEN` 都显示同一条“设置 TOKEN 后…”说明，留空令牌时容易误解；现在按实际环境区分——未设置时提示“未设置 TOKEN：全部接口都不校验令牌，请只在可信的内网或反向代理后使用”，设置后提示“已启用 TOKEN：除 `GET /healthz` 与 `GET /` 外，其余请求都要带 `Authorization: Bearer 令牌`”，并新增 `authRequired` 布尔值；文案不再包含尖括号，避免 JSON 转义成 `\u003c`。README 同步说明 `coreVersion` 是原生核心协议版本（当前 `0.2.17`），与应用版本、镜像标签区分。已执行 `go vet ./native/server`、`go test ./native/server`（8 项通过），并用本地构建的二进制分别以空 `TOKEN` 与已设置 `TOKEN` 启动服务，确认首页说明、`authRequired` 与无令牌访问 `/api/sources` 返回 401 的行为；容器与镜像验证仍由 Actions 的 `docker` 任务覆盖。
 
