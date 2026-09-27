@@ -15,6 +15,10 @@ services:
       TOKEN: "${TOKEN:-}"
       MAX_CONCURRENCY: "${MAX_CONCURRENCY:-8}"
       TZ: "${TZ:-Asia/Shanghai}"
+      PROXY_MODE: "${PROXY_MODE:-}"
+      PROXY_URL: "${PROXY_URL:-}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - zhenguojian-data:/data
     healthcheck:

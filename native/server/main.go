@@ -39,6 +39,7 @@ type service struct {
 	slots      chan struct{}
 	started    time.Time
 	edition    map[string]any
+	settings   *resourceSettings
 }
 
 func env(key, fallback string) string {
@@ -125,14 +126,19 @@ func (s *service) info(writer http.ResponseWriter, request *http.Request) {
 		"coreVersion":  s.edition["version"],
 		"edition":      map[string]any{"allSources": s.edition["allSources"]},
 		"authRequired": s.token != "",
+		"proxy":        s.proxyPayload(),
 		"page":         "/",
 		"endpoints": []string{
 			"GET /healthz",
 			"GET /api/info",
 			"GET /api/actions",
+			"GET /api/settings",
 			"GET /api/sources",
+			"GET /api/downloads",
+			"GET /api/cover?drama=…",
 			"POST /api/request",
 			"GET /media/会话/资源",
+			"GET /local?drama=…&index=…",
 		},
 		"request": "POST /api/request 使用与客户端原生核心一致的 JSON：{\"action\":\"catalog\",\"source\":\"hongguo\",\"page\":1}",
 		"auth":    s.authHint(),
@@ -221,10 +227,15 @@ func (s *service) routes() http.Handler {
 	mux.HandleFunc("GET /healthz", s.health)
 	mux.HandleFunc("GET /api/info", s.info)
 	mux.HandleFunc("GET /api/actions", s.actions)
+	mux.HandleFunc("GET /api/settings", s.settingsView)
 	mux.HandleFunc("GET /api/sources", s.sources)
+	mux.HandleFunc("GET /api/downloads", s.downloads)
+	mux.HandleFunc("GET /api/cover", s.cover)
 	mux.HandleFunc("POST /api/request", s.call)
 	mux.HandleFunc("GET /media/", s.mediaHandler)
 	mux.HandleFunc("HEAD /media/", s.mediaHandler)
+	mux.HandleFunc("GET /local", s.local)
+	mux.HandleFunc("HEAD /local", s.local)
 	mux.HandleFunc("/", s.notFound)
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		started := time.Now()
@@ -296,6 +307,14 @@ func main() {
 		slots:   make(chan struct{}, concurrency()),
 		started: time.Now(),
 		edition: edition,
+	}
+	if mode, address := proxyEnvironment(); mode != "" {
+		saved, err := instance.applyProxy(mode, address)
+		if err != nil {
+			log.Fatalf("代理设置失败：%v", err)
+		}
+		instance.settings = &saved
+		log.Printf("站源出网代理：模式 %s，地址 %s", saved.ProxyMode, maskProxyAddress(saved.ProxyURL))
 	}
 	server := &http.Server{
 		Addr:              address,

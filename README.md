@@ -2,7 +2,7 @@
 
 > 本仓库源码 fork 自 [enginJie/guoapp](https://github.com/enginJie/guoapp)，在此基础上继续维护设备端实现、打包流程与 Docker 部署形态。
 
-Flutter 多端独立短剧应用，原名“短剧库 APP”。站源请求、解析、下载和播放均在设备上完成，不依赖旧项目或自建服务。当前源码版本：**0.2.53+59（未验证开发快照）**。本轮给 Docker 服务加上网页播放界面：浏览器打开即为站源选择、搜索、目录、详情选集与 HLS 播放器，媒体由服务端按站源要求取流后经 `/media/` 转发，`hls.js` 随镜像内置。上一轮修正该服务首页的鉴权提示并区分令牌状态。更早一轮新增可选的 Docker 部署形态：`native/server` 把同一个原生核心以 HTTP 服务暴露（协议与客户端一致），根目录 `Dockerfile` 固定按全站源版构建，`scripts/package_docker_source.py` 生成可直接发给他人部署的纯源码包；App 本身仍是设备端应用，不依赖该服务。本轮另修复 GitHub Actions 首轮 `checks` 失败并让两版 Android 与 iOS 任务产出产物。上一轮新增管理员“启动时需要登录”开关：设置管理员密码后仍默认保持启动登录，管理员可在用户管理中关闭；关闭后保留密码保护，只在切换用户或手动锁定时验证。更早一轮核对剧果、野果、帝果的目录分页、榜单和播放解析链路：多站源更新默认批量 50 页，野果目录 / 搜索 / 播放使用 POST，剧果保留 CloudFront 签名 Cookie 到播放列表、分片、预加载和下载，帝果 vplayer 签名失败不再静默回退到未签名地址；野果运行时固定优先使用当前线路 `https://analyze.buxefaex.cc/`，通过 `https://ygdj7.com/` 发现新线路，旧域名仅保留缓存与身份兼容识别。本轮只维护源码和定向测试，不打包 APK、不安装设备、不做真实播放验收。
+Flutter 多端独立短剧应用，原名“短剧库 APP”。站源请求、解析、下载和播放均在设备上完成，不依赖旧项目或自建服务。当前源码版本：**0.2.54+60（未验证开发快照）**。本轮给 Docker 服务补齐代理与客户端已有功能：`PROXY_MODE` / `PROXY_URL` 让站源出网走服务器配置的代理（页面右上角显示当前代理），网页新增封面与下载（下载任务面板、批量控制、本地回放）。上一轮给该服务加上网页播放界面：浏览器打开即为站源选择、搜索、目录、详情选集与 HLS 播放器，媒体由服务端按站源要求取流后经 `/media/` 转发，`hls.js` 随镜像内置。更早一轮修正首页鉴权提示，并新增可选的 Docker 部署形态与源码打包脚本；App 本身仍是设备端应用，不依赖该服务。本轮另修复 GitHub Actions 首轮 `checks` 失败并让两版 Android 与 iOS 任务产出产物。上一轮新增管理员“启动时需要登录”开关：设置管理员密码后仍默认保持启动登录，管理员可在用户管理中关闭；关闭后保留密码保护，只在切换用户或手动锁定时验证。更早一轮核对剧果、野果、帝果的目录分页、榜单和播放解析链路：多站源更新默认批量 50 页，野果目录 / 搜索 / 播放使用 POST，剧果保留 CloudFront 签名 Cookie 到播放列表、分片、预加载和下载，帝果 vplayer 签名失败不再静默回退到未签名地址；野果运行时固定优先使用当前线路 `https://analyze.buxefaex.cc/`，通过 `https://ygdj7.com/` 发现新线路，旧域名仅保留缓存与身份兼容识别。本轮只维护源码和定向测试，不打包 APK、不安装设备、不做真实播放验收。
 
 按用户 2026-09-21 的要求，继续暂停整体验证。启动、榜单、画质增强、站源改名、画中画、连续播放控制栏、红果系列剧提醒、播放器 Tab 化、首页 / 播放页优化、多站源站源修复和本轮启动登录开关均保留未验证快照状态；本轮只执行源码级定向检查，未完成真实设备视觉验收、Release APK、IPA 或真实站源播放验收。历史版本的检查记录不能作为本轮新增功能的验收结论。
 
@@ -712,10 +712,27 @@ docker run -d --name zhenguojian-core --restart unless-stopped -p 8080:8080 \
 | --- | --- | --- |
 | `PORT` | `8080` | 容器内监听端口；compose 中映射到主机 `PORT` |
 | `DATA_DIR` | `/data` | 缓存、会话与下载记录目录，需挂载卷 |
-| `TOKEN` | 空 | 留空则全部接口与播放免令牌；设置后除 `GET /healthz`、`GET /api/info`、网页与 `hls.js` 外都要带 `Authorization: Bearer 令牌`，媒体请求用 `?token=` |
+| `TOKEN` | 空 | 留空则全部接口与播放免令牌；设置后除 `GET /healthz`、`GET /api/info`、网页与 `hls.js` 外都要带 `Authorization: Bearer 令牌`，媒体与封面请求用 `?token=` |
 | `MAX_CONCURRENCY` | `8` | 同时处理的接口请求数上限（1–64），超出返回 429；媒体转发不计入 |
+| `PROXY_MODE` | 未设置 | 站源出网方式：`auto` 读取系统代理、`direct` 直连、`manual` 用 `PROXY_URL`；留空表示不改动服务内已有设置 |
+| `PROXY_URL` | 未设置 | `manual` 模式的代理地址，支持 `http` / `https` / `socks5` / `socks5h`，例如 `http://host.docker.internal:7890` |
 | `TZ` | `Asia/Shanghai` | 时区 |
 | `GOPROXY` | `https://goproxy.cn,direct` | 仅构建期使用 |
+
+### 走服务器上的代理
+
+部分站源需要代理才能访问（例如服务器上有 VPN 或本地代理客户端）。在 `.env` 里设置：
+
+~~~sh
+PROXY_MODE=manual
+PROXY_URL=http://host.docker.internal:7890
+~~~
+
+- 代理跑在**宿主机**上时用 `host.docker.internal`（compose 已加 `host-gateway` 映射）；不要写 `127.0.0.1`，那在容器里指向容器自身。
+- 代理本身在另一台机器或容器里时，直接写它的地址，例如 `socks5://192.168.10.5:1080`。
+- `PROXY_MODE=direct` 表示强制直连并清空代理地址；两个变量都留空则保持服务内已保存的设置不变。
+- 只影响站源出网；本机 `127.0.0.1` 的媒体中转不走代理。修改后 `docker compose up -d`（重建容器）即可生效。
+- 当前状态可以在页面右上角徽标、`GET /api/settings` 或 `/api/info` 的 `proxy` 字段确认；地址里的账号密码会被脱敏显示。
 
 ### 接口
 
@@ -724,11 +741,15 @@ docker run -d --name zhenguojian-core --restart unless-stopped -p 8080:8080 \
 | GET | `/` | 网页播放界面；不校验令牌 |
 | GET | `/hls.min.js` | 内置播放器库，随镜像提供 |
 | GET | `/healthz` | 健康检查：编译版本、站源范围、运行时长；不校验令牌 |
-| GET | `/api/info` | 服务信息、接口清单、当前鉴权状态；不校验令牌 |
+| GET | `/api/info` | 服务信息、代理状态、接口清单、鉴权状态；不校验令牌 |
+| GET | `/api/settings` | 当前站源访问与资源设置（代理地址脱敏） |
 | GET | `/api/actions` | 支持的操作与说明 |
 | GET | `/api/sources` | 当前编译版本可用的站源 |
+| GET | `/api/downloads` | 下载任务列表 |
+| GET | `/api/cover?drama=…` | 封面图：由核心按站源要求取回并缓存后返回，`?force=1` 强制刷新 |
 | POST | `/api/request` | 与客户端原生核心一致的 JSON 协议 |
 | GET | `/media/会话/资源` | 播放列表与分片转发，`resolve` 返回的地址即为该路径 |
+| GET | `/local?drama=…&index=…` | 回放已下载到服务器的分集文件（支持 Range） |
 
 `/api/info` 与 `/healthz` 里的 `coreVersion` 是原生核心协议版本，应用版本看 `pubspec.yaml` 与镜像标签。`/api/info` 的 `auth` 字段会按当前环境如实说明：留空 `TOKEN` 时显示“未设置 TOKEN：全部接口都不校验令牌”，设置后显示“已启用 TOKEN”，并给出 `authRequired` 布尔值。
 
@@ -756,11 +777,13 @@ curl -s -X POST http://127.0.0.1:8080/api/request -H 'Content-Type: application/
 
 ### 网页使用与限制
 
-- 浏览器兼容：Chrome / Edge / Firefox 用内置 `hls.js` 播放 HLS，Safari 与 iOS 走原生 HLS；`mp4` 直链直接播放。
-- 暂不显示海报图（页面只列剧名、分类与集数），避免额外抓取站源图片。
+- 首页卡片与详情页显示封面：由服务调用核心的封面缓存取回（自动带站源需要的 Referer），浏览器只访问 `/api/cover`；站源没有封面或取回失败时卡片自动退回纯文字。
+- 详情页「下载全部」和播放页「下载本集」把分集加入服务器下载队列；顶部「下载」进入任务面板，可查看进度、暂停 / 继续 / 重试、删除单集、批量暂停 / 继续 / 清理已完成，已下载的分集可「本地播放」（走 `/local`，浏览器直接拉服务器上的文件）。
+- 浏览器兼容：Chrome / Edge / Firefox 用内置 `hls.js` 播放 HLS，Safari 与 iOS 走原生 HLS；`mp4` 直链与本地文件直接播放。
 - 部分分集是 VIP 试看、需要登录或受源站地区限制，解析会直接失败并在页面底部提示原因；换站源或换集再试。
 - 播放是“服务器拉流 + 浏览器取流”，会占用服务器带宽；同时观看人数多时建议提高 `MAX_CONCURRENCY` 并在反向代理上限速。
 - 播放会话默认闲置 10 分钟回收，单次进程最多 8 个播放会话；重新点一次该集即可重新解析。
+- 下载文件保存在 `/data` 卷内，注意服务器磁盘空间；下载并发与请求间隔沿用核心的资源设置。
 
 ### 运维提示
 
@@ -1032,6 +1055,8 @@ unzip ../真果·鉴-YYYYMMDDHHMM.zip -d ../restore
 | 平台工程 | Android 三架构、Windows / iOS 构建脚本、TV 布局与遥控；0.2.29 补强电视自动识别与统一横屏，待集中验证；国内依赖镜像、源码版本快照 |
 
 ### 当前检查与平台状态
+
+0.2.54+60 Docker 服务补齐代理与客户端已有功能：新增 `PROXY_MODE` / `PROXY_URL` 环境变量，启动时通过核心既有的 `saveResourceSettings` 生效（`auto` / `direct` / `manual`，支持 http / https / socks5 / socks5h），并新增 `GET /api/settings` 与页面右上角代理徽标用于确认（地址脱敏）；`/api/info` 增加 `proxy` 字段，compose 预置 `host.docker.internal:host-gateway` 便于代理跑在宿主机。新增 `GET /api/cover?drama=…`：由核心封面缓存取回后由服务返回图片（限制 16 MiB、校验缓存目录、支持强制刷新），首页卡片与详情页显示封面，取回失败自动退回纯文字；新增 `GET /api/downloads` 与 `GET /local?drama=…&index=…`（Range 直出已下载文件、校验路径在数据目录或下载根目录内），页面加入下载任务面板（进度、暂停 / 继续 / 重试、删除、批量暂停 / 继续 / 清理已完成、本地播放）与「下载全部」「下载本集」入口。已执行 `go vet ./...`、`go test ./native/server`（19 项通过，新增代理环境解析、代理写入与脱敏、设置接口、目录校验、Range 直出、封面 / 本地接口拒绝路径、下载列表）；本地构建二进制并以 `PROXY_URL=http://127.0.0.1:7890` 启动，确认启动日志、`/api/settings`、`/api/info.proxy` 与页面代理徽标一致；`PROXY_MODE=direct` 会清空代理地址，两个变量都不设时保持既有设置。真实站源的封面取回、下载与本地回放尚未验证，需在部署机上确认。
 
 0.2.53+59 给 Docker 服务加入网页播放界面：`GET /` 返回内置单页（站源选择、搜索、目录分页、详情选集、播放器与上一集 / 下一集 / 返回选集），`GET /hls.min.js` 随镜像内置 `hls.js 1.7.3`（Apache-2.0，附 `web/hls.LICENSE`），不依赖外网 CDN。媒体经 `GET /media/会话/资源` 转发：`resolve` 返回的核心本地流地址在服务端改写为 `/media/…`，播放列表内的分片、密钥与子列表链接同步改写，Range 请求透传，启用 `TOKEN` 时媒体链接带 `?token=`；`GET /api/info` 提供机器可读的服务信息（原 JSON 首页移到这里），未知路径返回 JSON 404，媒体转发不计入并发上限并把 `WriteTimeout` 放开以便长连接取流。核心侧只新增导出函数 `NativeStreamBase()`。已执行 `go vet ./...`、`go test ./native/server`（13 项通过，含播放列表改写、Range 透传、令牌校验、播放地址改写与非法路径拒绝），并用本地构建的二进制实际启动服务：`GET /` 返回 13 KB 页面且含页面标记与 `/hls.min.js`、`GET /hls.min.js` 返回 619692 字节、`GET /api/info` 鉴权说明正确、非法媒体路径与未知路径均为 404。真实站源播放（浏览器点开某一集）与容器内播放链路尚未验证，需在部署机上确认。
 
