@@ -29,9 +29,6 @@ def main():
                         '-i', 'testsrc2=size=160x90:rate=12', '-t', '3',
                         '-c:v', 'libx264', '-threads', '1', str(media)], check=True)
         report = directory / 'result.json'
-        portable = directory / 'portable_config'
-        portable.mkdir(exist_ok=True)
-        (portable / 'mpv.conf').write_text('vo=null\nao=null\n', encoding='utf-8')
         completed = subprocess.run([str(directory / (variant.slug + '.exe')), '--package-smoke', str(report), str(media)],
                                    cwd=directory, capture_output=True, text=True, timeout=90)
         evidence = json.loads(report.read_text(encoding='utf-8')) if report.is_file() else {}

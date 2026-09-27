@@ -33,11 +33,27 @@ Future<void> runPackageSmoke(List<String> arguments) async {
       configuration: const PlayerConfiguration(muted: true, vo: 'null'),
     );
     await player.setAudioTrack(AudioTrack.no());
-    final advancing = player.stream.position.firstWhere(
-      (time) => time.inMilliseconds >= 400,
+    var position = Duration.zero;
+    var duration = Duration.zero;
+    final positionStream = player.stream.position.listen(
+      (value) => position = value,
     );
-    await player.open(Media(remuxed.path));
-    await advancing.timeout(const Duration(seconds: 20));
+    final durationStream = player.stream.duration.listen(
+      (value) => duration = value,
+    );
+    await player.open(Media(Uri.file(remuxed.path).toString()));
+    final deadline = DateTime.now().add(const Duration(seconds: 20));
+    while (DateTime.now().isBefore(deadline) && position.inMilliseconds < 400) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    await positionStream.cancel();
+    await durationStream.cancel();
+    if (position.inMilliseconds < 400) {
+      throw StateError(
+        '播放器未能推进进度：position=${position.inMilliseconds}ms '
+        'duration=${duration.inMilliseconds}ms playing=${player.state.playing}',
+      );
+    }
     await report.writeAsString(
       jsonEncode({
         'ok': true,
