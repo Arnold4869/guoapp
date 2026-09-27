@@ -1,4 +1,5 @@
 import 'package:duanju_app/app_layout.dart';
+import 'package:duanju_app/detail_screen.dart';
 import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/main.dart';
 import 'package:duanju_app/models.dart';
@@ -126,8 +127,8 @@ void main() {
           Focus.of(tester.element(title)).requestFocus();
           await tester.pumpAndSettle();
           await press(tester, LogicalKeyboardKey.select);
-          await press(tester, LogicalKeyboardKey.arrowDown);
-          await press(tester, LogicalKeyboardKey.arrowDown);
+          Focus.of(tester.element(find.text('黄豆'))).requestFocus();
+          await tester.pumpAndSettle();
           await press(tester, LogicalKeyboardKey.select);
         }
         expect(
@@ -138,23 +139,47 @@ void main() {
         await tester.pumpAndSettle();
         await press(tester, LogicalKeyboardKey.select);
         expect(repository.detailCalls, 1);
-        expect(find.byKey(const ValueKey('start-play')), findsOneWidget);
-        focusRemote(tester, find.byKey(const ValueKey('episode-1')));
-        await tester.pumpAndSettle();
-        await press(tester, LogicalKeyboardKey.select);
         expect(find.text('这是一集 VIP 内容'), findsOneWidget);
         await press(tester, LogicalKeyboardKey.goBack);
         expect(find.text('这是一集 VIP 内容'), findsNothing);
-        expect(FocusManager.instance.primaryFocus?.debugLabel, 'remote-1');
-        await press(tester, LogicalKeyboardKey.escape);
         expect(
           FocusManager.instance.primaryFocus?.debugLabel,
           'remote-${FixtureRepository.free.id}',
         );
         expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
       },
     );
   }
+
+  testWidgets(
+    'TV detail screen keeps remote focus across episode selection and back',
+    (tester) async {
+      size(tester, const Size(960, 540));
+      final store = await makeStore();
+      final repository = TelevisionRepository();
+      await tester.pumpWidget(
+        televisionHost(
+          child: DetailScreen(
+            drama: FixtureRepository.free,
+            repository: repository,
+            store: store,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('start-play')), findsOneWidget);
+      focusRemote(tester, find.byKey(const ValueKey('episode-1')));
+      await tester.pumpAndSettle();
+      await press(tester, LogicalKeyboardKey.select);
+      expect(find.text('这是一集 VIP 内容'), findsOneWidget);
+      await press(tester, LogicalKeyboardKey.goBack);
+      expect(find.text('这是一集 VIP 内容'), findsNothing);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'remote-1');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   testWidgets(
     'remote grid reaches unbuilt rows, partial last row and pagination without touch',

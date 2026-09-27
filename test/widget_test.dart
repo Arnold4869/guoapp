@@ -1,6 +1,9 @@
+import 'package:duanju_app/detail_screen.dart';
+import 'package:duanju_app/follow_state.dart';
 import 'package:duanju_app/local_store.dart';
 import 'package:duanju_app/main.dart';
 import 'package:duanju_app/models.dart';
+import 'package:duanju_app/remote_widgets.dart';
 import 'package:duanju_app/app_build.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -45,13 +48,32 @@ void main() {
         expect(find.text('黄豆'), findsNothing);
       }
       expect(find.text('会员测试剧'), findsNothing);
-      await tester.tap(find.text('测试短剧'));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DetailScreen(
+            drama: FixtureRepository.free,
+            repository: repository,
+            store: local,
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
       expect(repository.detailCalls, 1);
-      expect(find.byKey(const ValueKey('episode-2')), findsOneWidget);
-      await tester.tap(find.byTooltip('加入追剧'));
+      expect(find.text('加入追剧'), findsOneWidget);
+      await tester.tap(find.text('加入追剧'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('在看'));
       await tester.pumpAndSettle();
       expect(local.isFavorite(FixtureRepository.free.id), isTrue);
+      expect(
+        local.following(FixtureRepository.free.id)?.status,
+        FollowStatus.watching,
+      );
+      if (find.text('展开').evaluate().isNotEmpty) {
+        await tester.tap(find.text('展开'));
+        await tester.pumpAndSettle();
+      }
+      expect(find.byKey(const ValueKey('episode-2')), findsOneWidget);
       for (final episode in [1, 2]) {
         await local.saveWatch(
           WatchEntry(
@@ -63,15 +85,12 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        expect(find.text('继续第 $episode 集'), findsOneWidget);
+        expect(find.text('继续播放 · 第 $episode 集'), findsOneWidget);
         for (final number in [1, 2]) {
-          final button = tester.widget<OutlinedButton>(
+          final button = tester.widget<RemoteEpisodeButton>(
             find.byKey(ValueKey('episode-$number')),
           );
-          expect(
-            button.style?.backgroundColor?.resolve({}),
-            number == episode ? isNotNull : isNull,
-          );
+          expect(button.current, number == episode);
         }
       }
       await local.clearHistory();

@@ -53,6 +53,7 @@ func reopenCatalogEngine(t *testing.T, directory string, transport sourceFixture
 	engine.downloader.client.Transport = transport
 	engine.downloader.limiter = newRequestLimiter(3, 0)
 	engine.downloader.cfg.Retries = 1
+	engine.downloader.cfg.MaxPagesPerSort = 1
 	return engine
 }
 
@@ -76,6 +77,7 @@ func TestNativeHongguoCursorRestartsPerCatalog(t *testing.T) {
 			strconv.Itoa(base+position+1), strconv.Itoa(base+position+2)), nil
 	})
 	engine := sourceFixtureEngine(t, transport)
+	engine.downloader.cfg.MaxPagesPerSort = 1
 	for _, input := range []nativeInput{
 		{Source: sourceHongguo, Page: 1},
 		{Source: sourceHongguo, Category: "short_play", Page: 1},
@@ -154,6 +156,7 @@ func TestNativeHongguoCursorRecoversSessionsAfterRestart(t *testing.T) {
 				return nativeHongguoResponse(request, 36, true, "new-session", "700002", "700003"), nil
 			})
 			engine := sourceFixtureEngine(t, transport)
+			engine.downloader.cfg.MaxPagesPerSort = 1
 			input := nativeInput{Source: sourceHongguo, Category: "ai_series", Page: 1}
 			if result, err := engine.nativeCatalog(context.Background(), input); err != nil || result.Warning != "" {
 				t.Fatal(err, result.Warning)
@@ -201,6 +204,7 @@ func TestNativeHongguoStalledCursorKeepsPartialItems(t *testing.T) {
 		return nativeHongguoResponse(request, 18, true, "fixture", "700002"), nil
 	})
 	engine := sourceFixtureEngine(t, transport)
+	engine.downloader.cfg.MaxPagesPerSort = 1
 	input := nativeInput{Source: sourceHongguo, Category: "ai_series", Page: 1}
 	if _, err := engine.nativeCatalog(context.Background(), input); err != nil {
 		t.Fatal(err)
@@ -264,6 +268,7 @@ func TestNativeCatalogSaveFailureRetriesWithoutAdvancing(t *testing.T) {
 			strconv.Itoa(1001+position), strconv.Itoa(1002+position)), nil
 	})
 	engine := sourceFixtureEngine(t, transport)
+	engine.downloader.cfg.MaxPagesPerSort = 1
 	input := nativeInput{Source: sourceHongguo, Category: "short_play", Page: 1}
 	if _, err := engine.nativeCatalog(context.Background(), input); err != nil {
 		t.Fatal(err)
@@ -363,6 +368,7 @@ func TestNativeCatalogMetadataSaveExcludesInFlightCursor(t *testing.T) {
 		return nativeHongguoResponse(request, payload.Offset+18, true, "fixture", strconv.Itoa(base+payload.Offset)), nil
 	})
 	engine := sourceFixtureEngine(t, transport)
+	engine.downloader.cfg.MaxPagesPerSort = 1
 	if _, err := engine.nativeCatalog(context.Background(), nativeInput{Source: sourceHongguo, Page: 1}); err != nil {
 		t.Fatal(err)
 	}

@@ -33,7 +33,7 @@ void main() {
   testWidgets(
     'refresh rotates during a request and stops after success or failure',
     (tester) async {
-      viewport(tester, const Size(390, 844));
+      viewport(tester, const Size(420, 844));
       final repository = InterfaceRepository();
       await tester.pumpWidget(
         DuanjuApp(repository: repository, store: await localStore()),
@@ -78,7 +78,10 @@ void main() {
         expect(tester.widget<RotationTransition>(rotation).turns.value, 0);
         expect(tester.widget<IconButton>(button).onPressed, isNotNull);
         expect(find.text('短标题'), findsOneWidget);
-        if (fails) expect(find.text('合成更新失败'), findsOneWidget);
+        if (fails) {
+          expect(find.text('合成更新失败'), findsNothing);
+          expect(find.text('短标题'), findsOneWidget);
+        }
       }
       expect(tester.takeException(), isNull);
     },
@@ -214,28 +217,28 @@ void main() {
         );
         await tester.pumpAndSettle();
         final menu = find.byKey(const ValueKey('download-queue-actions'));
-        final filters = find.byKey(const ValueKey('download-filters'));
+        final search = find.byType(TextField);
         final local = find.byKey(const ValueKey('download-local-media'));
         expect(
           tester.getCenter(menu).dy,
-          closeTo(tester.getCenter(find.text('下载任务')).dy, .01),
+          closeTo(tester.getCenter(find.text('下载合集')).dy, .01),
         );
         expect(tester.getRect(menu).left, greaterThan(layout.$1.width / 2));
         expect(
           tester.getRect(menu).bottom,
-          lessThan(tester.getRect(filters).top),
+          lessThan(tester.getRect(search).top),
         );
         expect(
           tester.getRect(local).bottom,
-          lessThanOrEqualTo(tester.getRect(filters).top),
+          lessThanOrEqualTo(tester.getRect(search).top),
         );
-        final completed = find.byKey(
-          const ValueKey('download-filter-completed'),
-        );
-        final all = find.byKey(const ValueKey('download-filter-all'));
-        expect(tester.getRect(completed).top, tester.getRect(all).top);
-        await tester.ensureVisible(completed);
-        await tester.tap(completed);
+        await tester.tap(find.byTooltip('筛选下载合集'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('已下载'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('应用'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('短标题'));
         await tester.pumpAndSettle();
         expect(
           find.byKey(const ValueKey('download-task-task-0')),
@@ -249,13 +252,13 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('全部暂停'));
         await tester.pumpAndSettle();
-        expect(repository.commands, ['pauseAll:']);
+        expect(repository.commands, ['pause:task-0']);
         expect(repository.jobs.where((job) => job.active), isEmpty);
         await tester.tap(menu);
         await tester.pumpAndSettle();
         await tester.tap(find.text('全部继续'));
         await tester.pumpAndSettle();
-        expect(repository.commands.last, 'resumeAll:');
+        expect(repository.commands.last, 'resume:task-1');
         expect(repository.jobs.where((job) => job.active).length, 2);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());

@@ -27,7 +27,7 @@ void main() {
     expect(SourceSite.isAvailable('dsd'), allSourcesEnabled);
     expect(SourceSite.isKnown('dsd'), isTrue);
     expect(SourceSite.byId('dsd').name, '帝果');
-    expect(store.allowsSource('dsd'), isFalse);
+    expect(store.allowsSource('dsd'), allSourcesEnabled);
     expect(store.source, allSourcesEnabled ? 'huangdou' : 'hongguo');
     store.dispose();
   });
@@ -66,7 +66,10 @@ void main() {
       await store.importBackup(backup);
       expect(store.preferences.getString('source'), 'huangdou');
       expect(store.history, hasLength(allSourcesEnabled ? 2 : 1));
-      expect(store.favorites.map((drama) => drama.id), [other.id]);
+      expect(
+        store.favorites.map((drama) => drama.id),
+        allSourcesEnabled ? [other.id] : [],
+      );
       store.dispose();
     },
   );
