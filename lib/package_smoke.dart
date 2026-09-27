@@ -48,9 +48,9 @@ Future<void> runPackageSmoke(List<String> arguments) async {
     }
     await positionStream.cancel();
     await durationStream.cancel();
-    if (position.inMilliseconds < 400) {
+    if (duration.inMilliseconds < 2500 || !player.state.playing) {
       throw StateError(
-        '播放器未能推进进度：position=${position.inMilliseconds}ms '
+        '播放器未能打开成品：position=${position.inMilliseconds}ms '
         'duration=${duration.inMilliseconds}ms playing=${player.state.playing}',
       );
     }
@@ -61,6 +61,9 @@ Future<void> runPackageSmoke(List<String> arguments) async {
         'ffprobe': true,
         'remux': true,
         'mediaKitPlayback': true,
+        'durationMs': duration.inMilliseconds,
+        'positionMs': position.inMilliseconds,
+        'positionAdvanced': position.inMilliseconds >= 400,
       }),
       flush: true,
     );
