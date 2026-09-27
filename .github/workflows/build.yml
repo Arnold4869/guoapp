@@ -203,3 +203,28 @@ jobs:
           path: dist/ios/*
           if-no-files-found: error
           retention-days: 14
+
+  docker:
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the service image
+        run: docker build --build-arg GOPROXY=https://proxy.golang.org,direct -t zhenguojian-core:ci .
+      - name: Smoke test the service
+        run: |
+          set -euo pipefail
+          mkdir -p ci-data
+          docker run -d --name zhenguojian-core -p 18080:8080 -e TOKEN=ci-token -v "$PWD/ci-data:/data" zhenguojian-core:ci
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/healthz > health.json; then break; fi
+            sleep 2
+          done
+          cat health.json
+          grep -q '"ok":true' health.json
+          grep -q '"allSources":true' health.json
+          curl -fsS -H 'Authorization: Bearer ci-token' http://127.0.0.1:18080/api/sources | grep -q '"dsd"'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/sources)" = "401"
+          docker logs zhenguojian-core
+          docker rm -f zhenguojian-core

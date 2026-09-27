@@ -1,6 +1,6 @@
 # 红果鉴 / 真果鉴
 
-Flutter 多端独立短剧应用，原名“短剧库 APP”。站源请求、解析、下载和播放均在设备上完成，不依赖旧项目或自建服务。当前源码版本：**0.2.50+56（未验证开发快照）**。本轮新增管理员“启动时需要登录”开关：设置管理员密码后仍默认保持启动登录，管理员可在用户管理中关闭；关闭后保留密码保护，只在切换用户或手动锁定时验证。上一轮核对剧果、野果、帝果的目录分页、榜单和播放解析链路：多站源更新默认批量 50 页，野果目录 / 搜索 / 播放使用 POST，剧果保留 CloudFront 签名 Cookie 到播放列表、分片、预加载和下载，帝果 vplayer 签名失败不再静默回退到未签名地址。野果运行时固定优先使用当前线路 `https://analyze.buxefaex.cc/`，通过 `https://ygdj7.com/` 发现新线路；旧域名仅保留缓存与身份兼容识别，不再主动作为接口回退地址；首页和推荐卡片点击后在当前页读取详情，成功后直接进入播放器，避免“正在进入播放”的中间页闪现；站源管理列表底部避让系统虚拟导航栏，避免最后一组站源被遮挡；播放页轻量 Tab 与紧凑选集网格之间补充少量间距，避免按钮贴得过紧；修复野果线路发现正则在原生核心初始化时触发 Go panic 导致 Android 启动闪退的问题。本轮只维护源码和定向测试，不打包 APK、不安装设备、不做真实播放验收。
+Flutter 多端独立短剧应用，原名“短剧库 APP”。站源请求、解析、下载和播放均在设备上完成，不依赖旧项目或自建服务。当前源码版本：**0.2.51+57（未验证开发快照）**。本轮新增可选的 Docker 部署形态：`native/server` 把同一个原生核心以 HTTP 服务暴露（协议与客户端一致），根目录 `Dockerfile` 固定按全站源版构建，`scripts/package_docker_source.py` 生成可直接发给他人部署的纯源码包；App 本身仍是设备端应用，不依赖该服务。本轮另修复 GitHub Actions 首轮 `checks` 失败并让两版 Android 与 iOS 任务产出产物。上一轮新增管理员“启动时需要登录”开关：设置管理员密码后仍默认保持启动登录，管理员可在用户管理中关闭；关闭后保留密码保护，只在切换用户或手动锁定时验证。更早一轮核对剧果、野果、帝果的目录分页、榜单和播放解析链路：多站源更新默认批量 50 页，野果目录 / 搜索 / 播放使用 POST，剧果保留 CloudFront 签名 Cookie 到播放列表、分片、预加载和下载，帝果 vplayer 签名失败不再静默回退到未签名地址；野果运行时固定优先使用当前线路 `https://analyze.buxefaex.cc/`，通过 `https://ygdj7.com/` 发现新线路，旧域名仅保留缓存与身份兼容识别。本轮只维护源码和定向测试，不打包 APK、不安装设备、不做真实播放验收。
 
 按用户 2026-09-21 的要求，继续暂停整体验证。启动、榜单、画质增强、站源改名、画中画、连续播放控制栏、红果系列剧提醒、播放器 Tab 化、首页 / 播放页优化、多站源站源修复和本轮启动登录开关均保留未验证快照状态；本轮只执行源码级定向检查，未完成真实设备视觉验收、Release APK、IPA 或真实站源播放验收。历史版本的检查记录不能作为本轮新增功能的验收结论。
 
@@ -646,7 +646,7 @@ SR-1、SR-2 与 SR-4 已接入源码，小型动漫 CNN 也包含在本轮；SR-
 | `hongguojian-windows` | `zhenguojian-windows` | 完整 ZIP 和 SHA256；从解压包检查原生核心、FFprobe、换封装及播放器启动 |
 | `hongguojian-ios-unsigned` | `zhenguojian-ios-unsigned` | 未签名 `.app` ZIP 和 SHA256，不能直接当已签名 IPA 安装 |
 
-Actions 分别传入默认参数与 `--all-sources` 构建两版，Flutter 和 Go 回归也覆盖两种编译配置。产物保留 14 天，不自动创建 GitHub Release。首次平台构建结果以实际 Actions 输出为准。
+Actions 分别传入默认参数与 `--all-sources` 构建两版，Flutter 和 Go 回归也覆盖两种编译配置。产物保留 14 天，不自动创建 GitHub Release。首次平台构建结果以实际 Actions 输出为准。另有 `docker` 任务：按根目录 `Dockerfile` 构建全站源服务镜像，并在容器内冒烟检查 `/healthz`、`/api/sources` 与令牌校验。
 
 Android 正式发布持续使用同一签名并递增构建号，在仓库 Secrets 配置：
 
@@ -671,6 +671,82 @@ storePassword=你的密码
 keyAlias=zhenguojian
 keyPassword=你的密码
 ~~~
+
+## Docker 服务部署
+
+可选方案：把原生核心（站源请求、目录与详情解析、播放地址解析）作为独立 HTTP 服务跑在服务器上，供自己在多设备或脚本中调用。它与客户端应用是两套入口：App 默认仍在设备端完成全部请求与解析，不依赖这个服务；只有显式调用该接口的客户端才会使用它。
+
+镜像由仓库根目录的 `Dockerfile` 构建，编译参数固定为全站源版（`-X duanjuapp/native/core.buildAllSources=true`），运行时数据写入 `/data` 卷。
+
+### 发给他人部署的源码包
+
+~~~sh
+python3 scripts/package_docker_source.py
+~~~
+
+生成 `dist/docker/zhenguojian-docker-source-<版本>.tar.gz`（纯源码，含 `Dockerfile`、`docker-compose.yml`、`.env.example` 和 README），可直接发给对方。对方服务器需要 Docker 与 Docker Compose 插件：
+
+~~~sh
+tar -xzf zhenguojian-docker-source-*.tar.gz
+cd zhenguojian
+cp .env.example .env
+docker compose up -d --build
+curl -s http://127.0.0.1:8080/healthz
+~~~
+
+不用 compose 时：
+
+~~~sh
+docker build -t zhenguojian-core:latest .
+docker run -d --name zhenguojian-core --restart unless-stopped -p 8080:8080 \
+  -e TOKEN=换成自己的令牌 -v zhenguojian-data:/data zhenguojian-core:latest
+~~~
+
+### 环境变量
+
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `PORT` | `8080` | 容器内监听端口；compose 中映射到主机 `PORT` |
+| `DATA_DIR` | `/data` | 缓存、会话与下载记录目录，需挂载卷 |
+| `TOKEN` | 空 | 设置后除 `GET /healthz` 外都要带 `Authorization: Bearer <token>` |
+| `MAX_CONCURRENCY` | `8` | 同时处理的请求数上限（1–64），超出返回 429 |
+| `TZ` | `Asia/Shanghai` | 时区 |
+| `GOPROXY` | `https://goproxy.cn,direct` | 仅构建期使用 |
+
+### 接口
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/healthz` | 健康检查：编译版本、站源范围、运行时长；不校验令牌 |
+| GET | `/api/actions` | 支持的操作与说明 |
+| GET | `/api/sources` | 当前编译版本可用的站源 |
+| POST | `/api/request` | 与客户端原生核心一致的 JSON 协议 |
+
+请求体就是客户端发给原生核心的内容，返回 `{"ok":true,"data":…}` 或 `{"ok":false,"error":…}`：
+
+~~~sh
+curl -s -X POST http://127.0.0.1:8080/api/request -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer 换成自己的令牌' -d '{"action":"sources"}'
+
+curl -s -X POST http://127.0.0.1:8080/api/request -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer 换成自己的令牌' -d '{"action":"catalog","source":"hongguo","page":1}'
+
+curl -s -X POST http://127.0.0.1:8080/api/request -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer 换成自己的令牌' -d '{"action":"catalog","source":"hongguo","query":"关键词"}'
+
+curl -s -X POST http://127.0.0.1:8080/api/request -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer 换成自己的令牌' -d '{"action":"detail","drama":{"id":"hongguo:1234"}}'
+~~~
+
+`resolve` 返回播放地址与所需请求头，媒体仍由调用方按地址取流；服务不代为下载或保存视频。
+
+### 运维提示
+
+- 只在内网使用时可留空 `TOKEN`；对公网开放必须设置 `TOKEN`，并放在 HTTPS 反向代理之后。
+- 服务需要能直连各站源；出口受限或源站限制会直接返回 `ok:false` 与错误原因。
+- 数据目录保存缓存与会话，备份该卷即可；升级镜像不会清除卷数据。
+- 容器内默认以 root 运行；需要降权时可在 compose 中加 `user: "1000:1000"` 并保证 `/data` 可写。
+- 该接口等价于客户端核心能力，请只在自有服务器上使用，不要公开分享令牌。
 
 ## 开发与构建
 
@@ -934,6 +1010,8 @@ unzip ../真果·鉴-YYYYMMDDHHMM.zip -d ../restore
 | 平台工程 | Android 三架构、Windows / iOS 构建脚本、TV 布局与遥控；0.2.29 补强电视自动识别与统一横屏，待集中验证；国内依赖镜像、源码版本快照 |
 
 ### 当前检查与平台状态
+
+0.2.51+57 新增可选的 Docker 部署形态：`native/server` 把原生核心的全部操作（站源列表、目录、搜索、详情、播放解析等）以 HTTP 服务暴露，协议与客户端原生核心一致（`POST /api/request` 收发同一份 JSON）；根目录 `Dockerfile` 以 `CGO_ENABLED=0` 静态链接、按全站源参数构建，运行时为 alpine + CA 证书，数据目录挂载 `/data`。服务提供 `GET /healthz`、`GET /api/actions`、`GET /api/sources`，设置 `TOKEN` 后除健康检查外都要求 `Authorization: Bearer`，并限制请求体 1 MiB、并发上限与优雅退出；`scripts/package_docker_source.py` 生成 `dist/docker/zhenguojian-docker-source-<版本>.tar.gz` 纯源码包，可直接发给他人 `docker compose up -d --build`。已执行 `go vet ./native/server`、`go test ./native/server`（7 项通过）、`CGO_ENABLED=0 go build -ldflags "-X duanjuapp/native/core.buildAllSources=true" ./server`，并在本机运行服务冒烟验证 `/healthz`（`allSources:true`）、`/api/sources`（8 个站源）、`/api/request` 与首页；`python -m unittest discover -s scripts` 覆盖新增打包脚本。本机未安装 Docker，镜像构建与容器冒烟由 Actions 的 `docker` 任务验证，尚未在真实服务器上部署。
 
 0.2.50+56 修复 GitHub Actions 首轮 `checks` 失败，使两版源码可以进入平台构建。Flutter 侧按当前界面重写 8 个测试文件：详情页选集默认折叠需先展开、首页卡片普通点击直达播放、下载合集默认折叠并按“分集操作”菜单暂停 / 继续 / 删除、追剧状态改为选择菜单、追剧标题带计数、刷新按钮仅在宽度 ≥ 400 时显示、多用户配置要求管理员已设置密码、合并音轨统一为 AAC LC、本地媒体停止文案、AI 站源默认汇总四个分类；`DetailScreen` 增加与 `DownloadsScreen` 一致的 `playerBuilder` 测试接缝，用于在测试中观察播放入口。原生核心按 `#EXTM3U` 头识别无扩展名播放列表；榜单第 1 页、红果游标分页夹具与 AI 目录聚合夹具按当前实现校正。已执行 `flutter pub get --enforce-lockfile`、`dart format --output=none --set-exit-if-changed lib test integration_test test_driver`、`dart analyze lib test integration_test test_driver`（仅剩既有 info 级 lint）、`flutter test --dart-define=DISABLE_REMOTE_IMAGES=true`（145 通过 / 2 跳过）、`flutter test --dart-define=DISABLE_REMOTE_IMAGES=true --dart-define=ALL_SOURCES=true`（146 通过 / 1 跳过）与 `go test ./...`（仅 Windows 权限位断言因平台差异失败，Linux 侧一致通过；`-race` 需 C 编译器，本机未执行）。本机验证环境为 Flutter 3.47.4、Dart 3.13.3、Go 1.24.1；未安装 Android SDK / NDK / JDK，未生成 APK，构建产物仍由 Actions 产出。同一轮修正 Actions 平台任务的前置工具步骤：`sdkmanager` 不再位于 PATH，改为从 `ANDROID_SDK_ROOT` 的 `cmdline-tools` 定位后安装 NDK；Windows 侧不再使用安装后配置失败的 `egor-tensin/setup-mingw`，改为 `choco install mingw` 并把实际 `gcc.exe` 目录写入 `GITHUB_PATH`。首轮 Actions 结果为 `checks` 通过、iOS 两版未签名包成功，Android 与 Windows 因上述前置步骤失败。
 

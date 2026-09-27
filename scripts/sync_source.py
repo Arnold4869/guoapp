@@ -18,6 +18,7 @@ SOURCE_FILES = {
     '.gitattributes', '.gitignore', '.metadata', '.editorconfig',
     'AGENTS.md', 'README.md', 'pubspec.yaml', 'pubspec.lock',
     'analysis_options.yaml', 'l10n.yaml', 'flutter_launcher_icons.yaml',
+    'Dockerfile', 'docker-compose.yml', '.dockerignore', '.env.example',
 }
 EXCLUDED_DIRECTORIES = {
     '.git', '.dart_tool', '.pub-cache', '.gradle', '.cxx', '.kotlin',
@@ -50,6 +51,7 @@ EXCLUDED_PATHS = {
 REQUIRED_FILES = {
     'AGENTS.md', 'README.md', 'pubspec.yaml', 'pubspec.lock', 'lib/main.dart',
     'native/go.mod', 'native/go.sum', 'native/bridge/main.go',
+    'native/server/main.go', 'Dockerfile', 'docker-compose.yml', '.env.example',
     'android/app/build.gradle.kts', 'android/gradle/wrapper/gradle-wrapper.properties',
     'windows/CMakeLists.txt', 'windows/flutter/CMakeLists.txt',
     '.github/workflows/build.yml', 'scripts/build_native.py',
