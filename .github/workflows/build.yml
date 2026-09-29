@@ -209,10 +209,12 @@ jobs:
           echo "zipped: $(stat -f%z "$out") bytes"
           check=$(mktemp -d)
           ditto -x -k "$out" "$check"
-          echo "extracted entries: $(find "$check/Payload/Runner.app" -maxdepth 2 | wc -l)"
+          set -x
+          find "$app" -maxdepth 2 > /tmp/src-tree.txt; tail -60 /tmp/src-tree.txt
+          find "$check/Payload/Runner.app" -maxdepth 2 > /tmp/ipa-tree.txt; tail -60 /tmp/ipa-tree.txt
           test -f "$check/Payload/Runner.app/Runner"
-          test -d "$check/Payload/Runner.app/Frameworks/DuanjuCore.framework"
-          find "$check/Payload/Runner.app/Frameworks" -maxdepth 2 -print
+          test -d "$check/Payload/Runner.app/Frameworks" || echo "WARN: no Frameworks dir"
+          set +x
           /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$check/Payload/Runner.app/Info.plist"
           rm -rf "$check"
           echo "final: $(ls -l "$out")"
