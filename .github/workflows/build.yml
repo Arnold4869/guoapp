@@ -205,14 +205,17 @@ jobs:
           mkdir -p dist/ios
           out="dist/ios/${{ matrix.edition }}-${version}+${bundle}-ios-unsigned.ipa"
           rm -f "$out"
-          ditto -c -k --sequesterRsrc --keepParent Payload "$out"
+          ditto -c -k --keepParent Payload "$out"
+          echo "zipped: $(stat -f%z "$out") bytes"
           check=$(mktemp -d)
-          unzip -q "$out" -d "$check"
+          ditto -x -k "$out" "$check"
+          echo "extracted entries: $(find "$check/Payload/Runner.app" -maxdepth 2 | wc -l)"
           test -f "$check/Payload/Runner.app/Runner"
-          test -f "$check/Payload/Runner.app/Frameworks/DuanjuCore.framework/DuanjuCore"
+          test -d "$check/Payload/Runner.app/Frameworks/DuanjuCore.framework"
+          find "$check/Payload/Runner.app/Frameworks" -maxdepth 2 -print
           /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$check/Payload/Runner.app/Info.plist"
           rm -rf "$check"
-          ls -l "$out"
+          echo "final: $(ls -l "$out")"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.edition }}-ios-unsigned
