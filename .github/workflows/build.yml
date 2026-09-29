@@ -186,6 +186,33 @@ jobs:
           channel: stable
           cache: true
       - run: python3 scripts/build_ios.py ${{ matrix.arguments }}
+      - name: Package unsigned ipa
+        run: |
+          set -euo pipefail
+          app=$(find build/ios/iphoneos -maxdepth 2 -type d -name 'Runner.app' | head -n 1)
+          test -n "$app"
+          size=$(stat -f%z "$app/Runner")
+          echo "main binary size: $size"
+          test "$size" -gt 1000000
+          if [ -e "$app/Runner.debug.dylib" ]; then echo 'unexpected debug dylib'; exit 1; fi
+          rm -rf Payload
+          mkdir -p Payload
+          ditto "$app" "Payload/Runner.app"
+          version=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)
+          short=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Payload/Runner.app/Info.plist)
+          bundle=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" Payload/Runner.app/Info.plist)
+          echo "Info.plist version: $short ($bundle) / pubspec: $version"
+          mkdir -p dist/ios
+          out="dist/ios/${{ matrix.edition }}-${version}+${bundle}-ios-unsigned.ipa"
+          rm -f "$out"
+          ditto -c -k --sequesterRsrc --keepParent Payload "$out"
+          check=$(mktemp -d)
+          unzip -q "$out" -d "$check"
+          test -f "$check/Payload/Runner.app/Runner"
+          test -f "$check/Payload/Runner.app/Frameworks/DuanjuCore.framework/DuanjuCore"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$check/Payload/Runner.app/Info.plist"
+          rm -rf "$check"
+          ls -l "$out"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.edition }}-ios-unsigned
